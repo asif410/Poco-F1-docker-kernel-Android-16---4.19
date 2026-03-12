@@ -57,6 +57,18 @@ jobs:
         cd KernelSU-Next
         echo "KSUVER=$(git rev-list --count HEAD)" >> $GITHUB_ENV
 
+    - name: Fake Missing Xiaomi Touch Firmware
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
+        
+        # Create the dummy pramboot file
+        mkdir -p drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/pramboot/
+        echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/pramboot/FT8719_Pramboot_V0.5_20171221.i
+        
+        # Pre-emptively fake the fw_sample file (it usually asks for this one right after!)
+        mkdir -p drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/
+        echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/fw_sample.i
+        
     - name: Build Image.gz-dtb with Docker Flags
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
