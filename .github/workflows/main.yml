@@ -61,23 +61,29 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         
-        # Create the dummy pramboot file
-        mkdir -p drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/pramboot/
-        echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/pramboot/FT8719_Pramboot_V0.5_20171221.i
+        # Move into the problematic touch driver folder
+        cd drivers/input/touchscreen/xiaomi/focaltech_touch_mi/
         
-        # Create the firmware folder
-        mkdir -p drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/
+        # 1. Create the base folders just to be safe
+        mkdir -p include/pramboot/
+        mkdir -p include/firmware/
         
-        # The sample firmware we did last time
-        echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/fw_sample.i
+        # 2. Add the specific ones we already know about
+        echo "0x00" > include/pramboot/FT8719_Pramboot_V0.5_20171221.i
+        echo "0x00" > include/firmware/fw_sample.i
+        echo "0x00" > include/firmware/fw_ft8719_e10.i
+        echo "0x00" > include/firmware/fw_ft3518_e5.i
+        echo "0x00" > include/firmware/fw_ft8719_tianma.i
+        echo "0x00" > include/firmware/fw_ft8719_ebbg.i
+        echo "0x00" > include/firmware/fw_ft8719_boe.i
         
-        # The E10 firmware it just asked for
-        echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/fw_ft8719_e10.i
-        
-        # Preemptively faking all other Poco F1 panel variants so it stops crashing!
-        echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/fw_ft8719_tianma.i
-        echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/fw_ft8719_ebbg.i
-        echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/fw_ft8719_boe.i
+        # 3. The Hacker Sweeper: Automatically scan the source code for ANY other missing .i files 
+        # and instantly create a fake 0x00 file for them so the compiler never crashes again!
+        grep -rh "\.i\"" . | grep -o 'include/[^"]*\.i' | sort -u | while read -r fw_file; do
+            mkdir -p "$(dirname "$fw_file")"
+            echo "0x00" > "$fw_file"
+            echo "Dynamically faked: $fw_file"
+        done
         
     - name: Build Image.gz-dtb with Docker Flags
       run: |
