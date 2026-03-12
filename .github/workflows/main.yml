@@ -31,7 +31,8 @@ jobs:
     - name: Clone kernel & clean
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
-        git clone --recursive --depth=1 https://github.com/duckyduckG/android_kernel_xiaomi_sdm845_419.git android-kernel
+        # Locked strictly to the Android 16 Xiaomi branch
+        git clone --recursive -b lineage-23.2_xiaomi --depth=1 https://github.com/duckyduckG/android_kernel_xiaomi_sdm845_419.git android-kernel
         cd android-kernel
         sed -i 's/ -dirty//g' scripts/setlocalversion
         make clean
@@ -44,9 +45,9 @@ jobs:
         rm -rf arch/arm64/boot/dts/qcom-sdm845
         rm -rf arch/arm64/boot/dts/xiaomi
         
-        # Now clone ONLY the device trees. The main kernel already has the drivers inline!
-        git clone --depth=1 https://github.com/duckyduckG/devicetree_qcom-sdm845_419.git arch/arm64/boot/dts/qcom-sdm845
-        git clone --depth=1 https://github.com/duckyduckG/devicetree_xiaomi_419.git arch/arm64/boot/dts/xiaomi
+        # Try the specific branch first. If the DT repo doesn't have it, fallback to default.
+        git clone -b lineage-23.2_xiaomi --depth=1 https://github.com/duckyduckG/devicetree_qcom-sdm845_419.git arch/arm64/boot/dts/qcom-sdm845 || git clone --depth=1 https://github.com/duckyduckG/devicetree_qcom-sdm845_419.git arch/arm64/boot/dts/qcom-sdm845
+        git clone -b lineage-23.2_xiaomi --depth=1 https://github.com/duckyduckG/devicetree_xiaomi_419.git arch/arm64/boot/dts/xiaomi || git clone --depth=1 https://github.com/duckyduckG/devicetree_xiaomi_419.git arch/arm64/boot/dts/xiaomi
 
     - name: Apply KernelSU-Next
       run: |
@@ -98,6 +99,9 @@ jobs:
         echo "Appending Xiaomi configs"
         cat arch/arm64/configs/vendor/xiaomi/sdm845-common.config >> out/.config || true
         cat arch/arm64/configs/vendor/xiaomi/beryllium.config >> out/.config || true
+        
+        # INJECTING THE DEVELOPER's NATIVE DOCKER/LXC CONFIG!
+        cat arch/arm64/configs/vendor/xiaomi/lxc.config >> out/.config || true
 
         echo "Injecting Docker Flags"
         cat << 'EOF' >> out/.config
