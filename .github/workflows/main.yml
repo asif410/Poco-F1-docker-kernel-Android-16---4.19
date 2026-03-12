@@ -65,9 +65,19 @@ jobs:
         mkdir -p drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/pramboot/
         echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/pramboot/FT8719_Pramboot_V0.5_20171221.i
         
-        # Pre-emptively fake the fw_sample file (it usually asks for this one right after!)
+        # Create the firmware folder
         mkdir -p drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/
+        
+        # The sample firmware we did last time
         echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/fw_sample.i
+        
+        # The E10 firmware it just asked for
+        echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/fw_ft8719_e10.i
+        
+        # Preemptively faking all other Poco F1 panel variants so it stops crashing!
+        echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/fw_ft8719_tianma.i
+        echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/fw_ft8719_ebbg.i
+        echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/fw_ft8719_boe.i
         
     - name: Build Image.gz-dtb with Docker Flags
       run: |
