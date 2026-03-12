@@ -21,6 +21,10 @@ jobs:
 
     - name: Fetch toolchains
       run: |
+        # Force HTTP/1.1 and massively increase the Git buffer to stop GitLab from dropping the connection!
+        git config --global http.version HTTP/1.1
+        git config --global http.postBuffer 524288000
+        
         cd $GITHUB_WORKSPACE
         mkdir -p kernel_workspace
         cd kernel_workspace
