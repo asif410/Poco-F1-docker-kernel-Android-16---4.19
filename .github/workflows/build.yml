@@ -45,7 +45,6 @@ jobs:
         rm -rf arch/arm64/boot/dts/qcom-sdm845
         rm -rf arch/arm64/boot/dts/xiaomi
         
-        # Cleanly fetch the default branches to avoid log warnings
         git clone --depth=1 https://github.com/duckyduckG/devicetree_qcom-sdm845_419.git arch/arm64/boot/dts/qcom-sdm845
         git clone --depth=1 https://github.com/duckyduckG/devicetree_xiaomi_419.git arch/arm64/boot/dts/xiaomi
 
@@ -56,22 +55,19 @@ jobs:
         cd KernelSU-Next
         echo "KSUVER=$(git rev-list --count HEAD)" >> $GITHUB_ENV
 
-    - name: Fetch Real Xiaomi Touch Firmware (Tianma Fix)
+    - name: Fetch Real Xiaomi Touch Firmware (Dynamic Search)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        
-        # Use the correct combined SDM845 branch: dipper-q-oss
         git clone --depth=1 https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git -b dipper-q-oss micode_source
         
-        # Ensure target directories exist
-        mkdir -p drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/
+        mkdir -p drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/pramboot/
+        mkdir -p drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/
         mkdir -p drivers/input/touchscreen/xiaomi/nvt_touch/
         
-        # Copy the actual firmware header files
-        cp -r micode_source/drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/* drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/ 2>/dev/null || true
-        cp -r micode_source/drivers/input/touchscreen/xiaomi/nvt_touch/* drivers/input/touchscreen/xiaomi/nvt_touch/ 2>/dev/null || true
+        # Dynamically hunt for the firmware arrays and copy them to the expected paths
+        find micode_source/drivers/input/touchscreen -type f -name "*.i" -exec cp {} drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/ \; 2>/dev/null || true
+        find micode_source/drivers/input/touchscreen -type f -name "*.h" -exec cp {} drivers/input/touchscreen/xiaomi/nvt_touch/ \; 2>/dev/null || true
         
-        # Clean up
         rm -rf micode_source
 
     - name: Build Image.gz-dtb with Docker Flags
@@ -85,11 +81,9 @@ jobs:
 
         make O=out ARCH=arm64 CC=clang $BA $EX vendor/sdm845-perf_defconfig
 
-        echo "Appending Xiaomi configs"
         cat arch/arm64/configs/vendor/xiaomi/sdm845-common.config >> out/.config || true
         cat arch/arm64/configs/vendor/xiaomi/beryllium.config >> out/.config || true
         
-        echo "Injecting Docker Flags Safely"
         ./scripts/config --file out/.config \
           -e NAMESPACES -e NET_NS -e PID_NS -e IPC_NS -e UTS_NS -e USER_NS \
           -e CGROUPS -e CGROUP_CPUACCT -e CGROUP_DEVICE -e CGROUP_FREEZER \
@@ -104,15 +98,14 @@ jobs:
           -e EXT4_FS_POSIX_ACL
         
         make O=out ARCH=arm64 CC=clang $BA $EX olddefconfig
-
-        echo "Building DTBs"
         make O=out ARCH=arm64 CC=clang $BA $EX dtbs
 
-        echo "Compiling final Image.gz-dtb"
-        make -j$(nproc) O=out ARCH=arm64 CC=clang $BA $EX Image.gz-dtb 2>&1 | tee build.log
-
-        if [ ! -f out/arch/arm64/boot/Image.gz-dtb ]; then
-          echo "ERROR: Build failed, no Image.gz-dtb produced"
+        echo "Compiling final Image.gz-dtb..."
+        if ! make -j$(nproc) O=out ARCH=arm64 CC=clang $BA $EX Image.gz-dtb 2>&1 | tee build.log; then
+          echo "========================================"
+          echo "❌ BUILD FAILED! PRINTING ERROR CONTEXT:"
+          echo "========================================"
+          grep -C 10 "error:" build.log
           exit 1
         fi
 
@@ -125,7 +118,7 @@ jobs:
         
         cat << 'EOF' > anykernel.sh
         properties() { '
-        kernel.string=Docker KernelSU A16 by Dhara
+        kernel.string=Docker KernelSU A16
         do.devicecheck=1
         do.modules=0
         do.systemless=1
@@ -154,8 +147,9 @@ jobs:
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
+      if: always()
       with:
         name: PocoF1-Docker-KernelBuild
         path: |
           kernel_workspace/android-kernel/build.log
-          AK3-PocoF1-Docker-KernelSU_*.zip
+          *.zip
