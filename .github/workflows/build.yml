@@ -17,7 +17,6 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update -qq
-        # Added flex, bison, and libssl-dev which are often required for newer build pipelines
         sudo apt-get install -y git ccache build-essential zip curl python3 bc libncurses5-dev flex bison libssl-dev
 
     - name: Fetch toolchains
@@ -45,8 +44,10 @@ jobs:
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         rm -rf arch/arm64/boot/dts/qcom-sdm845
         rm -rf arch/arm64/boot/dts/xiaomi
-        git clone -b lineage-23.2_xiaomi --depth=1 https://github.com/duckyduckG/devicetree_qcom-sdm845_419.git arch/arm64/boot/dts/qcom-sdm845 || git clone --depth=1 https://github.com/duckyduckG/devicetree_qcom-sdm845_419.git arch/arm64/boot/dts/qcom-sdm845
-        git clone -b lineage-23.2_xiaomi --depth=1 https://github.com/duckyduckG/devicetree_xiaomi_419.git arch/arm64/boot/dts/xiaomi || git clone --depth=1 https://github.com/duckyduckG/devicetree_xiaomi_419.git arch/arm64/boot/dts/xiaomi
+        
+        # Cleanly fetch the default branches to avoid log warnings
+        git clone --depth=1 https://github.com/duckyduckG/devicetree_qcom-sdm845_419.git arch/arm64/boot/dts/qcom-sdm845
+        git clone --depth=1 https://github.com/duckyduckG/devicetree_xiaomi_419.git arch/arm64/boot/dts/xiaomi
 
     - name: Apply KernelSU-Next
       run: |
@@ -59,14 +60,14 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         
-        # Clone the official Poco F1 (beryllium) OSS branch
-        git clone --depth=1 https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git -b beryllium-q-oss micode_source
+        # Use the correct combined SDM845 branch: dipper-q-oss
+        git clone --depth=1 https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git -b dipper-q-oss micode_source
         
         # Ensure target directories exist
         mkdir -p drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/
         mkdir -p drivers/input/touchscreen/xiaomi/nvt_touch/
         
-        # Copy the actual firmware header files for Tianma and other panels
+        # Copy the actual firmware header files
         cp -r micode_source/drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/* drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/ 2>/dev/null || true
         cp -r micode_source/drivers/input/touchscreen/xiaomi/nvt_touch/* drivers/input/touchscreen/xiaomi/nvt_touch/ 2>/dev/null || true
         
