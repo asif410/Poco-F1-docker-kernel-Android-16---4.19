@@ -1,0 +1,160 @@
+name: Build Poco F1 Docker Kernel 4.19 (KernelSU)
+
+on:
+  workflow_dispatch:
+
+env:
+  TZ: Asia/Kolkata
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update -qq
+        # Added flex, bison, and libssl-dev which are often required for newer build pipelines
+        sudo apt-get install -y git ccache build-essential zip curl python3 bc libncurses5-dev flex bison libssl-dev
+
+    - name: Fetch toolchains
+      run: |
+        git config --global http.version HTTP/1.1
+        git config --global http.postBuffer 524288000
+        
+        cd $GITHUB_WORKSPACE
+        mkdir -p kernel_workspace
+        cd kernel_workspace
+        git clone --depth=1 https://gitlab.com/crdroidandroid/android_prebuilts_clang_host_linux-x86_clang-r487747c clang-aosp
+        git clone --depth=1 https://gitlab.com/crdroidandroid/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 gcc-64
+        git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 gcc-32
+
+    - name: Clone kernel & clean
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace
+        git clone --recursive -b lineage-23.2_xiaomi --depth=1 https://github.com/duckyduckG/android_kernel_xiaomi_sdm845_419.git android-kernel
+        cd android-kernel
+        sed -i 's/ -dirty//g' scripts/setlocalversion
+        make clean
+
+    - name: Add DTs & Techpack
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
+        rm -rf arch/arm64/boot/dts/qcom-sdm845
+        rm -rf arch/arm64/boot/dts/xiaomi
+        git clone -b lineage-23.2_xiaomi --depth=1 https://github.com/duckyduckG/devicetree_qcom-sdm845_419.git arch/arm64/boot/dts/qcom-sdm845 || git clone --depth=1 https://github.com/duckyduckG/devicetree_qcom-sdm845_419.git arch/arm64/boot/dts/qcom-sdm845
+        git clone -b lineage-23.2_xiaomi --depth=1 https://github.com/duckyduckG/devicetree_xiaomi_419.git arch/arm64/boot/dts/xiaomi || git clone --depth=1 https://github.com/duckyduckG/devicetree_xiaomi_419.git arch/arm64/boot/dts/xiaomi
+
+    - name: Apply KernelSU-Next
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
+        curl -LSs https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next/kernel/setup.sh | bash -
+        cd KernelSU-Next
+        echo "KSUVER=$(git rev-list --count HEAD)" >> $GITHUB_ENV
+
+    - name: Fetch Real Xiaomi Touch Firmware (Tianma Fix)
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
+        
+        # Clone the official Poco F1 (beryllium) OSS branch
+        git clone --depth=1 https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git -b beryllium-q-oss micode_source
+        
+        # Ensure target directories exist
+        mkdir -p drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/
+        mkdir -p drivers/input/touchscreen/xiaomi/nvt_touch/
+        
+        # Copy the actual firmware header files for Tianma and other panels
+        cp -r micode_source/drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/* drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/ 2>/dev/null || true
+        cp -r micode_source/drivers/input/touchscreen/xiaomi/nvt_touch/* drivers/input/touchscreen/xiaomi/nvt_touch/ 2>/dev/null || true
+        
+        # Clean up
+        rm -rf micode_source
+
+    - name: Build Image.gz-dtb with Docker Flags
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
+        export ARCH=arm64 SUBARCH=arm
+        export PATH=$PWD/../clang-aosp/bin:$PWD/../gcc-64/bin:$PWD/../gcc-32/bin:$PATH
+        export KBUILD_BUILD_USER=${{ github.actor }} KBUILD_BUILD_HOST=Github
+        BA="CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_ARM32=arm-linux-androideabi-"
+        EX="LD=ld.lld LLVM=1 LLVM_IAS=1"
+
+        make O=out ARCH=arm64 CC=clang $BA $EX vendor/sdm845-perf_defconfig
+
+        echo "Appending Xiaomi configs"
+        cat arch/arm64/configs/vendor/xiaomi/sdm845-common.config >> out/.config || true
+        cat arch/arm64/configs/vendor/xiaomi/beryllium.config >> out/.config || true
+        
+        echo "Injecting Docker Flags Safely"
+        ./scripts/config --file out/.config \
+          -e NAMESPACES -e NET_NS -e PID_NS -e IPC_NS -e UTS_NS -e USER_NS \
+          -e CGROUPS -e CGROUP_CPUACCT -e CGROUP_DEVICE -e CGROUP_FREEZER \
+          -e CGROUP_SCHED -e CPUSETS -e MEMCG -e MEMCG_SWAP -e MEMCG_SWAP_ENABLED \
+          -e CGROUP_PIDS -e POSIX_MQUEUE -e POSIX_MQUEUE_SYSCTL \
+          -e VETH -e BRIDGE -e BRIDGE_NETFILTER -e NETFILTER_XT_MATCH_ADDRTYPE \
+          -e IP_NF_TARGET_MASQUERADE -e IP6_NF_TARGET_MASQUERADE -e IP6_NF_NAT -e NF_NAT \
+          -e OVERLAY_FS -e BLK_CGROUP -e DEBUG_BLK_CGROUP -e BLK_DEV_THROTTLING \
+          -e SECCOMP -e SECCOMP_FILTER -e KEYS -e BPF -e BPF_SYSCALL -e CGROUP_BPF \
+          -e MACVLAN -e IPVLAN -e VXLAN -e BRIDGE_VLAN_FILTERING \
+          -e CFQ_GROUP_IOSCHED -e CFS_BANDWIDTH -e NET_CLS_CGROUP -e CGROUP_NET_PRIO \
+          -e EXT4_FS_POSIX_ACL
+        
+        make O=out ARCH=arm64 CC=clang $BA $EX olddefconfig
+
+        echo "Building DTBs"
+        make O=out ARCH=arm64 CC=clang $BA $EX dtbs
+
+        echo "Compiling final Image.gz-dtb"
+        make -j$(nproc) O=out ARCH=arm64 CC=clang $BA $EX Image.gz-dtb 2>&1 | tee build.log
+
+        if [ ! -f out/arch/arm64/boot/Image.gz-dtb ]; then
+          echo "ERROR: Build failed, no Image.gz-dtb produced"
+          exit 1
+        fi
+
+    - name: Package AnyKernel3
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace
+        git clone --depth=1 https://github.com/osm0sis/AnyKernel3
+        cd AnyKernel3
+        cp ../android-kernel/out/arch/arm64/boot/Image.gz-dtb ./
+        
+        cat << 'EOF' > anykernel.sh
+        properties() { '
+        kernel.string=Docker KernelSU A16 by Dhara
+        do.devicecheck=1
+        do.modules=0
+        do.systemless=1
+        do.cleanup=1
+        do.cleanuponabort=0
+        device.name1=beryllium
+        device.name2=Poco F1
+        device.name3=POCO F1
+        os.version=16
+        os.patchlevel=2026-03
+        '; }
+        boot_attributes() {
+        set_perm_recursive 0 0 755 644 $RAMDISK/*;
+        set_perm_recursive 0 0 750 750 $RAMDISK/init* $RAMDISK/sbin;
+        }
+        BLOCK=/dev/block/bootdevice/by-name/boot;
+        IS_SLOT_DEVICE=0;
+        RAMDISK_COMPRESSION=auto;
+        PATCH_VBMETA_FLAG=auto;
+        . tools/ak3-core.sh;
+        dump_boot; 
+        write_boot;
+        EOF
+        
+        zip -r $GITHUB_WORKSPACE/AK3-PocoF1-Docker-KernelSU_${KSUVER}.zip ./*
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: PocoF1-Docker-KernelBuild
+        path: |
+          kernel_workspace/android-kernel/build.log
+          AK3-PocoF1-Docker-KernelSU_*.zip
