@@ -55,7 +55,7 @@ jobs:
         cd KernelSU-Next
         echo "KSUVER=$(git rev-list --count HEAD)" >> $GITHUB_ENV
 
-    - name: Fetch Real Xiaomi Touch Firmware (Structure & Fallback)
+    - name: Fetch Real Xiaomi Touch Firmware (Structure & Full Fallback)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         git clone --depth=1 https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git -b dipper-q-oss micode_source
@@ -67,13 +67,18 @@ jobs:
         cp -r micode_source/drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/* drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/ 2>/dev/null || true
         cp -r micode_source/drivers/input/touchscreen/xiaomi/nvt_touch/* drivers/input/touchscreen/xiaomi/nvt_touch/ 2>/dev/null || true
         
-        # 2. Targeted Compiler Bypass for Focaltech
+        # 2. Complete Compiler Bypass for Dormant Focaltech Driver
         mkdir -p drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/pramboot/
         mkdir -p drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/
         
-        if [ ! -f drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/pramboot/FT8719_Pramboot_V0.5_20171221.i ]; then
-          echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/pramboot/FT8719_Pramboot_V0.5_20171221.i
-        fi
+        # Fake all possible Focaltech firmware dependencies so the compiler stops crashing
+        echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/pramboot/FT8719_Pramboot_V0.5_20171221.i
+        echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/fw_sample.i
+        echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/fw_ft8719_e10.i
+        echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/fw_ft3518_e5.i
+        echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/fw_ft8719_tianma.i
+        echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/fw_ft8719_ebbg.i
+        echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/fw_ft8719_boe.i
         
         rm -rf micode_source
 
