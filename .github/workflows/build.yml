@@ -55,18 +55,25 @@ jobs:
         cd KernelSU-Next
         echo "KSUVER=$(git rev-list --count HEAD)" >> $GITHUB_ENV
 
-    - name: Fetch Real Xiaomi Touch Firmware (Dynamic Search)
+    - name: Fetch Real Xiaomi Touch Firmware (Structure & Fallback)
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         git clone --depth=1 https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git -b dipper-q-oss micode_source
         
-        mkdir -p drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/pramboot/
-        mkdir -p drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/
+        # 1. Copy everything while preserving the exact folder structure
+        mkdir -p drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/
         mkdir -p drivers/input/touchscreen/xiaomi/nvt_touch/
         
-        # Dynamically hunt for the firmware arrays and copy them to the expected paths
-        find micode_source/drivers/input/touchscreen -type f -name "*.i" -exec cp {} drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/ \; 2>/dev/null || true
-        find micode_source/drivers/input/touchscreen -type f -name "*.h" -exec cp {} drivers/input/touchscreen/xiaomi/nvt_touch/ \; 2>/dev/null || true
+        cp -r micode_source/drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/* drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/ 2>/dev/null || true
+        cp -r micode_source/drivers/input/touchscreen/xiaomi/nvt_touch/* drivers/input/touchscreen/xiaomi/nvt_touch/ 2>/dev/null || true
+        
+        # 2. Targeted Compiler Bypass for Focaltech
+        mkdir -p drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/pramboot/
+        mkdir -p drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/
+        
+        if [ ! -f drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/pramboot/FT8719_Pramboot_V0.5_20171221.i ]; then
+          echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/pramboot/FT8719_Pramboot_V0.5_20171221.i
+        fi
         
         rm -rf micode_source
 
