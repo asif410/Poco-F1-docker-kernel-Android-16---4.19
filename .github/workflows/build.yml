@@ -60,18 +60,16 @@ jobs:
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         git clone --depth=1 https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git -b dipper-q-oss micode_source
         
-        # 1. Copy everything while preserving the exact folder structure
+        # We still need this because Jiro's config expects the firmware headers to exist!
         mkdir -p drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/
         mkdir -p drivers/input/touchscreen/xiaomi/nvt_touch/
         
         cp -r micode_source/drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/* drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/ 2>/dev/null || true
         cp -r micode_source/drivers/input/touchscreen/xiaomi/nvt_touch/* drivers/input/touchscreen/xiaomi/nvt_touch/ 2>/dev/null || true
         
-        # 2. Complete Compiler Bypass for Dormant Focaltech Driver
         mkdir -p drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/pramboot/
         mkdir -p drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/
         
-        # Fake all possible Focaltech firmware dependencies so the compiler stops crashing
         echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/pramboot/FT8719_Pramboot_V0.5_20171221.i
         echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/fw_sample.i
         echo "0x00" > drivers/input/touchscreen/xiaomi/focaltech_touch_mi/include/firmware/fw_ft8719_e10.i
@@ -82,7 +80,7 @@ jobs:
         
         rm -rf micode_source
 
-    - name: Build Image.gz-dtb with EROFS and Docker Flags
+    - name: Build Image.gz-dtb with Jiro's Config and Docker Flags
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         export ARCH=arm64 SUBARCH=arm
@@ -91,14 +89,12 @@ jobs:
         BA="CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_ARM32=arm-linux-androideabi-"
         EX="LD=ld.lld LLVM=1 LLVM_IAS=1"
 
-        make O=out ARCH=arm64 CC=clang $BA $EX vendor/sdm845-perf_defconfig
-
-        cat arch/arm64/configs/vendor/xiaomi/sdm845-common.config >> out/.config || true
-        cat arch/arm64/configs/vendor/xiaomi/beryllium.config >> out/.config || true
+        # Apply Jiro's perfect configuration!
+        mkdir -p out
+        cp $GITHUB_WORKSPACE/jiro_config out/.config
         
-        # Injected EROFS_FS and EROFS_FS_ZIP flags right at the beginning here
+        echo "Injecting Docker Flags Safely over Jiro's Config"
         ./scripts/config --file out/.config \
-          -e EROFS_FS -e EROFS_FS_ZIP \
           -e NAMESPACES -e NET_NS -e PID_NS -e IPC_NS -e UTS_NS -e USER_NS \
           -e CGROUPS -e CGROUP_CPUACCT -e CGROUP_DEVICE -e CGROUP_FREEZER \
           -e CGROUP_SCHED -e CPUSETS -e MEMCG -e MEMCG_SWAP -e MEMCG_SWAP_ENABLED \
@@ -111,7 +107,10 @@ jobs:
           -e CFQ_GROUP_IOSCHED -e CFS_BANDWIDTH -e NET_CLS_CGROUP -e CGROUP_NET_PRIO \
           -e EXT4_FS_POSIX_ACL
         
+        # Make sure the configuration is valid and resolves any new dependencies
         make O=out ARCH=arm64 CC=clang $BA $EX olddefconfig
+
+        echo "Building DTBs"
         make O=out ARCH=arm64 CC=clang $BA $EX dtbs
 
         echo "Compiling final Image.gz-dtb..."
@@ -132,7 +131,7 @@ jobs:
         
         cat << 'EOF' > anykernel.sh
         properties() { '
-        kernel.string=Docker KernelSU A16 (EROFS)
+        kernel.string=Docker KernelSU A16 (Jiro Base)
         do.devicecheck=1
         do.modules=0
         do.systemless=1
