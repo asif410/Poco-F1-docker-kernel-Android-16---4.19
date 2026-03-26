@@ -82,7 +82,7 @@ jobs:
         
         rm -rf micode_source
 
-    - name: Build Image.gz-dtb with Docker Flags
+    - name: Build Image.gz-dtb with EROFS and Docker Flags
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         export ARCH=arm64 SUBARCH=arm
@@ -96,7 +96,9 @@ jobs:
         cat arch/arm64/configs/vendor/xiaomi/sdm845-common.config >> out/.config || true
         cat arch/arm64/configs/vendor/xiaomi/beryllium.config >> out/.config || true
         
+        # Injected EROFS_FS and EROFS_FS_ZIP flags right at the beginning here
         ./scripts/config --file out/.config \
+          -e EROFS_FS -e EROFS_FS_ZIP \
           -e NAMESPACES -e NET_NS -e PID_NS -e IPC_NS -e UTS_NS -e USER_NS \
           -e CGROUPS -e CGROUP_CPUACCT -e CGROUP_DEVICE -e CGROUP_FREEZER \
           -e CGROUP_SCHED -e CPUSETS -e MEMCG -e MEMCG_SWAP -e MEMCG_SWAP_ENABLED \
@@ -130,7 +132,7 @@ jobs:
         
         cat << 'EOF' > anykernel.sh
         properties() { '
-        kernel.string=Docker KernelSU A16
+        kernel.string=Docker KernelSU A16 (EROFS)
         do.devicecheck=1
         do.modules=0
         do.systemless=1
